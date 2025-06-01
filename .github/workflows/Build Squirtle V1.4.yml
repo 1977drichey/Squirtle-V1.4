@@ -1,0 +1,37 @@
+name: Build Squirtle V1.4
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      IMG_NAME: squirtle-os
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support coreutils
+
+      - name: Clone pi-gen and Prepare Files
+        run: |
+          git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
+          mkdir -p pi-gen/stage1/boot
+          cp -r etc usr .github pi-gen/stage1/
+          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
+
+      - name: Set Permissions on Build Script
+        run: chmod +x pi-gen/build.sh
+
+      - name: Build Raspberry Pi Image
+        run: |
+          cd pi-gen
+          ./build.sh
