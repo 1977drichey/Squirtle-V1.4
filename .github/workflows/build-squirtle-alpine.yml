@@ -31,8 +31,18 @@ jobs:
           cp -r etc usr .github pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
 
+          # 💣 Remove LibreOffice bloat to avoid build failures
+          rm -rf pi-gen/stage5/00-install-libreoffice
+
       - name: Build the image
         run: |
           cd pi-gen
-          sudo ./build.sh
 
+          # 🐢 Optional but good practice: Set image name and enable ZIP output
+          echo IMG_NAME=Squirtle > config
+          echo DEPLOY_ZIP=1 >> config
+
+          # 🕵️‍♂️ Enable debug mode for detailed output
+          export PI_GEN_DEBUG=1
+
+          sudo ./build.sh
