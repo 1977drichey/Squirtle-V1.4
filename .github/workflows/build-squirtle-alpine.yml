@@ -10,22 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Build Environment
+      - name: Install pi-gen dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support
+          sudo apt-get install -y \
+            qemu-user-static \
+            binfmt-support \
+            quilt \
+            debootstrap \
+            libarchive-tools \
+            arch-test
 
-      - name: Clone pi-gen and Prepare Files
+      - name: Clone pi-gen and inject files
         run: |
           git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
-          mkdir -p pi-gen/stage1/boot                   # <-- FIXED!
+          mkdir -p pi-gen/stage1/boot
           cp -r etc usr .github pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
 
-      - name: Build Image
+      - name: Build the image
         run: |
           cd pi-gen
           sudo ./build.sh
+
