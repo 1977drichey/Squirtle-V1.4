@@ -1,9 +1,25 @@
 name: Build Squirtle V1.4
-on: push:
-  branches: [ main ]
+
+on:
+  push:
+    branches:
+      - main
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: echo 'Build starting...'
+      - name: Set up build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+      - name: Clone pi-gen
+        run: |
+          git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
+          cp -r etc usr .github pi-gen/stage1/
+          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
+      - name: Build Image
+        run: |
+          cd pi-gen
+          ./build.sh
