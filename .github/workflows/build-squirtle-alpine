@@ -28,4 +28,4 @@ jobs:
       - name: Build Image
         run: |
           cd pi-gen
-          ./build.sh
+          sudo ./build.sh
