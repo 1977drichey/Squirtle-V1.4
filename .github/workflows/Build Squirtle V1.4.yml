@@ -1,0 +1,60 @@
+name: Build Squirtle V1.4
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install pi-gen dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-user-static \
+            binfmt-support \
+            quilt \
+            debootstrap \
+            libarchive-tools \
+            arch-test \
+            zip \
+            xz-utils
+
+      - name: Clone pi-gen and inject files
+        run: |
+          git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
+          mkdir -p pi-gen/stage1/boot
+          cp -r etc usr .github pi-gen/stage1/
+          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
+          cp config pi-gen/
+
+      - name: Build the image
+        run: |
+          cd pi-gen
+          sudo ./build.sh
+
+      - name: Clean up build cache to free space
+        run: |
+          sudo rm -rf pi-gen/work
+          sudo apt-get clean
+
+      - name: Compress image (zip + xz)
+        run: |
+          cd pi-gen/deploy
+          ls -lh
+          zip Squirtle-V1.4.zip *.img
+          xz -9e *.img
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: squirtle-v1.4-output
+          path: |
+            pi-gen/deploy/Squirtle-V1.4.zip
+            pi-gen/deploy/*.xz
