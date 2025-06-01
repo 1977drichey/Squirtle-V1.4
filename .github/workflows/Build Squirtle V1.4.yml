@@ -34,4 +34,4 @@ jobs:
       - name: Build Raspberry Pi Image
         run: |
           cd pi-gen
-          ./build.sh
+          sudo ./build.sh
