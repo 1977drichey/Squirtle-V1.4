@@ -35,12 +35,14 @@ jobs:
 
           # Inject custom build stages
           mkdir -p pi-gen/stage-tempclean
-          echo '#!/bin/bash -e' > pi-gen/stage-tempclean/00-run.sh
-          echo 'echo "🧼 Mid-stage cleanup running..."' >> pi-gen/stage-tempclean/00-run.sh
-          echo 'apt-get clean' >> pi-gen/stage-tempclean/00-run.sh
-          echo 'rm -rf /var/cache/apt/* /tmp/*' >> pi-gen/stage-tempclean/00-run.sh
-          echo 'journalctl --rotate || true' >> pi-gen/stage-tempclean/00-run.sh
-          echo 'journalctl --vacuum-time=1s || true' >> pi-gen/stage-tempclean/00-run.sh
+          cat << 'EOF' > pi-gen/stage-tempclean/00-run.sh
+#!/bin/bash -e
+echo "🧼 Mid-stage cleanup running..."
+apt-get clean
+rm -rf /var/cache/apt/* /tmp/*
+journalctl --rotate || true
+journalctl --vacuum-time=1s || true
+EOF
           chmod +x pi-gen/stage-tempclean/00-run.sh
 
           # Inject your files into stage1
@@ -48,32 +50,4 @@ jobs:
           cp -r etc usr .github pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
 
-          # ✅ Overwrite stage-order safely as a FILE
-          echo -e "stage0\nstage1\nstage2\nstage-tempclean\nstage3" > pi-gen/stage-order
-
-          # 🔥 Prune fat stages
-          rm -rf pi-gen/stage4
-          rm -rf pi-gen/stage5
-
-      - name: Build the image
-        run: |
-          cd pi-gen
-          sudo ./build.sh
-
-      - name: Clean up to free disk space before upload
-        run: |
-          sudo rm -rf pi-gen/work
-          sudo rm -rf ~/.cache
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-          sudo journalctl --rotate
-          sudo journalctl --vacuum-time=1s
-
-      - name: Upload raw image (.img)
-        uses: actions/upload-artifact@v4
-        with:
-          name: squirtle-v1.4-output
-          path: pi-gen/deploy/*.img
+          # ✅ Overwrite stage-order as a FILE (not directory!)
