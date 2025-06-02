@@ -33,12 +33,24 @@ jobs:
           rm -rf pi-gen/stage5/00-install-libreoffice
 
           echo IMG_NAME=Squirtle > pi-gen/config
-          echo DEPLOY_ZIP=0 >> pi-gen/config  # turn off internal compression
+          echo DEPLOY_ZIP=0 >> pi-gen/config
 
       - name: Build the image
         run: |
           cd pi-gen
           sudo ./build.sh
+
+      - name: Deep clean to free disk space before upload
+        run: |
+          sudo rm -rf pi-gen/work
+          sudo rm -rf ~/.cache
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          sudo journalctl --rotate
+          sudo journalctl --vacuum-time=1s
 
       - name: Upload raw image (.img)
         uses: actions/upload-artifact@v4
