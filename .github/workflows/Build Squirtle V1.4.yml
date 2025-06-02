@@ -60,5 +60,4 @@ jobs:
         with:
           name: squirtle-v1.4-output
           path: |
-            pi-gen/deploy/*.zip
             pi-gen/deploy/*.xz
