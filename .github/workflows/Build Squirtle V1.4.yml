@@ -26,21 +26,33 @@ jobs:
             zip \
             xz-utils
 
+      - name: Clone pi-gen and inject files
+        run: |
+          git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
+          mkdir -p pi-gen/stage1/boot
+          cp -r etc usr .github pi-gen/stage1/
+          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
+
+          # 💣 Remove LibreOffice bloat
+          rm -rf pi-gen/stage5/00-install-libreoffice
+
+          # ✅ Create config file inline
+          echo IMG_NAME=Squirtle > pi-gen/config
+          echo DEPLOY_ZIP=1 >> pi-gen/config
+
       - name: Build the image
         run: |
           cd pi-gen
           sudo ./build.sh
 
-      - name: Clean up build cache to free space
+      - name: Clean up build cache
         run: |
           sudo rm -rf pi-gen/work
           sudo apt-get clean
 
-      - name: Compress image (zip + xz)
+      - name: Compress image to xz (optional extra)
         run: |
           cd pi-gen/deploy
-          ls -lh
-          zip Squirtle-V1.4.zip *.img
           xz -9e *.img
 
       - name: Upload build artifacts
@@ -48,5 +60,5 @@ jobs:
         with:
           name: squirtle-v1.4-output
           path: |
-            pi-gen/deploy/Squirtle-V1.4.zip
+            pi-gen/deploy/*.zip
             pi-gen/deploy/*.xz
