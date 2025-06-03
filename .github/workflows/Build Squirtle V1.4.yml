@@ -8,10 +8,20 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated to v4
+
+      - name: Free up disk space
+        run: |
+          echo "🧹 Freeing up disk space before build..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          df -h
 
       - name: Install pi-gen dependencies
         run: |
@@ -22,77 +32,111 @@ jobs:
             quilt \
             debootstrap \
             libarchive-tools \
-            arch-test
+            arch-test \
+            kpartx \
+            parted
 
-      - name: Clone pi-gen and inject files
+      - name: Clone pi-gen and setup config
         run: |
           git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
-
-          # Basic image config
-          echo IMG_NAME=Squirtle > pi-gen/config
-          echo DEPLOY_ZIP=0 >> pi-gen/config
-          echo DEPLOY_COMPRESSION=none >> pi-gen/config
-          echo ENABLE_RECOMMENDED=0 >> pi-gen/config
-
-          # Remove LibreOffice installer if present
-          rm -rf pi-gen/stage5/00-install-libreoffice || true
-
-          # Copy only valid stage content (avoid .github)
-          mkdir -p pi-gen/stage1/boot
-          cp -r etc usr pi-gen/stage1/
-          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
-
-          # Add custom cleanup stage
-          mkdir -p pi-gen/stage-tempclean
-          cat << 'EOF' > pi-gen/stage-tempclean/00-run.sh
-          #!/bin/bash -e
-          echo "🧼 Mid-stage cleanup running..."
-          apt-get clean
-          rm -rf /var/cache/apt/* /tmp/*
-          journalctl --rotate || true
-          journalctl --vacuum-time=1s || true
+          cd pi-gen
+          
+          # Create proper config file
+          cat << 'EOF' > config
+          IMG_NAME=Squirtle
+          TARGET_HOSTNAME=squirtle
+          DEPLOY_ZIP=0
+          DEPLOY_COMPRESSION=none
+          ENABLE_SSH=1
+          FIRST_USER_NAME=pi
+          FIRST_USER_PASS=raspberry
+          STAGE_LIST="stage0 stage1 stage2"
           EOF
-          chmod +x pi-gen/stage-tempclean/00-run.sh
+          
+          # Show config for debugging
+          echo "=== CONFIG FILE ==="
+          cat config
 
-          # Insert stage-tempclean between stage2 and stage3
-          mv pi-gen/stage-tempclean pi-gen/stage2.5-tempclean
-
-          # Remove bloated stages
-          rm -rf pi-gen/stage4 pi-gen/stage5
+      - name: Setup custom stages
+        run: |
+          cd pi-gen
+          
+          # Remove problematic stages
+          rm -rf stage4 stage5
+          
+          # Only copy files if they exist in your repo
+          if [ -d "../etc" ]; then
+            echo "Copying etc directory..."
+            cp -r ../etc stage1/ || echo "Warning: Could not copy etc"
+          fi
+          
+          if [ -d "../usr" ]; then
+            echo "Copying usr directory..."
+            cp -r ../usr stage1/ || echo "Warning: Could not copy usr"
+          fi
+          
+          # Create a simple custom stage for any additional setup
+          mkdir -p stage2/99-custom-setup
+          cat << 'EOF' > stage2/99-custom-setup/00-run.sh
+          #!/bin/bash -e
+          echo "Running custom setup..."
+          
+          # Clean up to save space
+          on_chroot << 'CHROOT_EOF'
+          apt-get clean
+          rm -rf /var/cache/apt/*
+          rm -rf /tmp/*
+          CHROOT_EOF
+          EOF
+          chmod +x stage2/99-custom-setup/00-run.sh
 
       - name: Build the image
         run: |
           cd pi-gen
-
-          echo "=== PATCHING BUILD.SH ==="
-          # Patch build.sh to safely handle pushd/popd
-          sed -i '87s|.*|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is not a directory."; fi|' build.sh
-          sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
-
+          
           echo "=== STARTING BUILD ==="
-          sudo ./build.sh || echo "⚠️ build.sh exited with code $?"
-
+          echo "Current directory: $(pwd)"
+          echo "Available stages:"
+          ls -la stage*
+          
+          # Run build with better error handling
+          sudo CLEAN=1 ./build.sh 2>&1 | tee build.log || {
+            echo "⚠️ Build failed with exit code $?"
+            echo "=== BUILD LOG TAIL ==="
+            tail -50 build.log
+            echo "=== WORK DIRECTORY CONTENTS ==="
+            ls -la work/ || echo "No work directory"
+            exit 1
+          }
+          
           echo "=== BUILD COMPLETE ==="
-          echo "📁 Checking output directory:"
-          ls -lh deploy || echo "❌ No deploy folder found"
-          echo "📦 Contents of pi-gen/deploy:"
-          ls -lh pi-gen/deploy || echo "❌ No image was generated"
 
-      - name: Clean up to free disk space before upload
+      - name: Check build output
         run: |
-          echo "🧹 Cleaning up to prevent GitHub disk failures..."
-          sudo rm -rf pi-gen/work
-          sudo rm -rf ~/.cache
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-          sudo journalctl --rotate
-          sudo journalctl --vacuum-time=1s
+          cd pi-gen
+          echo "📁 Checking deploy directory:"
+          ls -lah deploy/ || echo "❌ No deploy folder found"
+          
+          echo "📦 Looking for images:"
+          find . -name "*.img" -type f | head -10
+          
+          echo "💾 Disk usage:"
+          df -h
 
-      - name: Upload raw image (.img)
+      - name: Clean up before upload
+        run: |
+          echo "🧹 Cleaning up work directory..."
+          sudo rm -rf pi-gen/work
+          sudo rm -rf pi-gen/.pc
+          sudo apt-get clean
+
+      - name: Upload image
         uses: actions/upload-artifact@v4
+        if: always()  # Upload even if there are warnings
         with:
           name: squirtle-v1.5.1-output
-          path: pi-gen/deploy/*.img
+          path: |
+            pi-gen/deploy/*.img
+            pi-gen/deploy/*.zip
+            pi-gen/build.log
+          retention-days: 30
