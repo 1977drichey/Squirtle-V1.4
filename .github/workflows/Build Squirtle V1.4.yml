@@ -34,15 +34,15 @@ jobs:
           echo DEPLOY_COMPRESSION=none >> pi-gen/config
           echo ENABLE_RECOMMENDED=0 >> pi-gen/config
 
-          # Remove broken LibreOffice installer
+          # Remove LibreOffice installer if present
           rm -rf pi-gen/stage5/00-install-libreoffice || true
 
-          # Inject files (NO .github)
+          # Copy only valid stage content (avoid .github)
           mkdir -p pi-gen/stage1/boot
           cp -r etc usr pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
 
-          # Custom cleanup stage
+          # Add custom cleanup stage
           mkdir -p pi-gen/stage-tempclean
           cat << 'EOF' > pi-gen/stage-tempclean/00-run.sh
           #!/bin/bash -e
@@ -54,11 +54,10 @@ jobs:
           EOF
           chmod +x pi-gen/stage-tempclean/00-run.sh
 
-          # Clean and define a safe stage order
-          rm -f pi-gen/stage-order
-          echo -e "stage0\nstage1\nstage2\nstage-tempclean\nstage3" > pi-gen/stage-order
+          # Insert stage-tempclean between stage2 and stage3
+          mv pi-gen/stage-tempclean pi-gen/stage2.5-tempclean
 
-          # Remove unused stages
+          # Remove bloated stages
           rm -rf pi-gen/stage4 pi-gen/stage5
 
       - name: Build the image
@@ -66,7 +65,8 @@ jobs:
           cd pi-gen
 
           echo "=== PATCHING BUILD.SH ==="
-          sed -i '87s|.*|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is a file."; fi|' build.sh
+          # Patch build.sh to safely handle pushd/popd
+          sed -i '87s|.*|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is not a directory."; fi|' build.sh
           sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
 
           echo "=== STARTING BUILD ==="
@@ -80,7 +80,7 @@ jobs:
 
       - name: Clean up to free disk space before upload
         run: |
-          echo "🧹 Cleaning up space to avoid GitHub OOM death..."
+          echo "🧹 Cleaning up to prevent GitHub disk failures..."
           sudo rm -rf pi-gen/work
           sudo rm -rf ~/.cache
           sudo rm -rf /usr/share/dotnet
@@ -96,4 +96,3 @@ jobs:
         with:
           name: squirtle-v1.5.1-output
           path: pi-gen/deploy/*.img
-
