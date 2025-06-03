@@ -34,10 +34,10 @@ jobs:
           echo DEPLOY_COMPRESSION=none >> pi-gen/config
           echo ENABLE_RECOMMENDED=0 >> pi-gen/config
 
-          # Remove libreoffice install if it still exists
+          # Remove broken LibreOffice installer
           rm -rf pi-gen/stage5/00-install-libreoffice || true
 
-          # Copy only etc and usr (NO .github to avoid breaking stage)
+          # Inject files (NO .github)
           mkdir -p pi-gen/stage1/boot
           cp -r etc usr pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
@@ -54,8 +54,11 @@ jobs:
           EOF
           chmod +x pi-gen/stage-tempclean/00-run.sh
 
-          # Define a safe stage order
+          # Clean and define a safe stage order
+          rm -f pi-gen/stage-order
           echo -e "stage0\nstage1\nstage2\nstage-tempclean\nstage3" > pi-gen/stage-order
+
+          # Remove unused stages
           rm -rf pi-gen/stage4 pi-gen/stage5
 
       - name: Build the image
@@ -63,7 +66,6 @@ jobs:
           cd pi-gen
 
           echo "=== PATCHING BUILD.SH ==="
-          # Patch build.sh to avoid crashing on popd
           sed -i '87s|.*|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is a file."; fi|' build.sh
           sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
 
@@ -94,3 +96,4 @@ jobs:
         with:
           name: squirtle-v1.5.1-output
           path: pi-gen/deploy/*.img
+
