@@ -29,9 +29,9 @@ jobs:
         run: |
           git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
 
-          # Inject config
+          # Inject config (use modern compression control)
           echo IMG_NAME=Squirtle > pi-gen/config
-          echo DEPLOY_ZIP=0 >> pi-gen/config
+          echo DEPLOY_COMPRESSION=none >> pi-gen/config
           echo ENABLE_RECOMMENDED=0 >> pi-gen/config
 
           # Inject custom cleanup stage
@@ -49,23 +49,23 @@ jobs:
           cp -r etc usr .github pi-gen/stage1/
           echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
 
-          # Correct stage-order as FILE
+          # Define custom stage order
           echo -e "stage0\nstage1\nstage2\nstage-tempclean\nstage3" > pi-gen/stage-order
 
-          # Remove unnecessary stages
+          # Remove unused/bloated stages
           rm -rf pi-gen/stage4
           rm -rf pi-gen/stage5
-     
+
       - name: Build the image
         run: |
           cd pi-gen
 
-          # 🛠 Patch build.sh to safely skip pushd/popd when stage-order is a file
-          sed -i '87s/^.*$/if [ -d "$STAGE_LIST" ]; then pushd "$STAGE_LIST"; else echo "Skipping pushd: $STAGE_LIST is a file."; fi/' build.sh
-          sed -i '122s/^.*$/if dirs > \/dev\/null 2>\&1; then popd; fi/' build.sh
+          # Patch pushd and popd in build.sh
+          sed -i 's|pushd "\$STAGE_LIST"|if [ -d "$STAGE_LIST" ]; then pushd "$STAGE_LIST"; else echo "Skipping pushd: $STAGE_LIST is a file."; fi|' build.sh
+          sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
 
           sudo ./build.sh
-      
+
       - name: Clean up to free disk space before upload
         run: |
           sudo rm -rf pi-gen/work
