@@ -61,7 +61,7 @@ jobs:
 
           echo "=== PATCHING BUILD.SH ==="
           # ✅ Patch current pi-gen build.sh safely
-          sed -i 's|pushd "\$SCRIPT_DIR/\$STAGE_LIST"|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is a file."; fi|' build.sh
+          sed -i '87s|.*|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is a file."; fi|' build.sh
           sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
 
           echo "=== STARTING BUILD ==="
