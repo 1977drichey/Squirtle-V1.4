@@ -55,16 +55,17 @@ jobs:
           # Remove unnecessary stages
           rm -rf pi-gen/stage4
           rm -rf pi-gen/stage5
-
+     
       - name: Build the image
         run: |
           cd pi-gen
 
-          # Patch build.sh to skip invalid pushd
+          # 🛠 Patch build.sh to safely skip pushd/popd when stage-order is a file
           sed -i '87s/^.*$/if [ -d "$STAGE_LIST" ]; then pushd "$STAGE_LIST"; else echo "Skipping pushd: $STAGE_LIST is a file."; fi/' build.sh
+          sed -i '122s/^.*$/if dirs > \/dev\/null 2>\&1; then popd; fi/' build.sh
 
           sudo ./build.sh
-
+      
       - name: Clean up to free disk space before upload
         run: |
           sudo rm -rf pi-gen/work
