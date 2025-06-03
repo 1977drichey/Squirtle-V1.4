@@ -43,4 +43,52 @@ jobs:
           echo 'journalctl --vacuum-time=1s || true' >> pi-gen/stage-tempclean/00-run.sh
           chmod +x pi-gen/stage-tempclean/00-run.sh
 
-          #
+          # Inject your files into stage1
+          mkdir -p pi-gen/stage1/boot
+          cp -r etc usr .github pi-gen/stage1/
+          echo "boot setup skipped" | sudo tee pi-gen/stage1/boot/README.txt
+
+          # Define custom stage order
+          echo -e "stage0\nstage1\nstage2\nstage-tempclean\nstage3" > pi-gen/stage-order
+
+          # Remove unused/bloated stages
+          rm -rf pi-gen/stage4
+          rm -rf pi-gen/stage5
+
+      - name: Build the image
+        run: |
+          cd pi-gen
+
+          echo "=== PATCHING BUILD.SH ==="
+          # ✅ Patch current pi-gen build.sh safely
+          sed -i 's|pushd "\$SCRIPT_DIR/\$STAGE_LIST"|if [ -d "$SCRIPT_DIR/$STAGE_LIST" ]; then pushd "$SCRIPT_DIR/$STAGE_LIST"; else echo "Skipping pushd: $SCRIPT_DIR/$STAGE_LIST is a file."; fi|' build.sh
+          sed -i 's|^popd$|if dirs > /dev/null 2>\&1; then popd; fi|' build.sh
+
+          echo "=== STARTING BUILD ==="
+          sudo ./build.sh || echo "⚠️ build.sh exited with code $?"
+
+          echo "=== BUILD COMPLETE ==="
+
+          echo "📁 Checking output directory:"
+          ls -lh deploy || echo "❌ No deploy folder found"
+
+          echo "📦 Contents of pi-gen/deploy:"
+          ls -lh pi-gen/deploy || echo "❌ No image was generated"
+
+      - name: Clean up to free disk space before upload
+        run: |
+          sudo rm -rf pi-gen/work
+          sudo rm -rf ~/.cache
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          sudo journalctl --rotate
+          sudo journalctl --vacuum-time=1s
+
+      - name: Upload raw image (.img)
+        uses: actions/upload-artifact@v4
+        with:
+          name: squirtle-v1.4-output
+          path: pi-gen/deploy/*.img
